@@ -1,0 +1,497 @@
+{
+  "name": "AppUser",
+  "type": "object",
+  "properties": {
+    "username": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string",
+      "format": "email"
+    },
+    "password": {
+      "type": "string"
+    },
+    "avatar_url": {
+      "type": "string"
+    },
+    "bio": {
+      "type": "string"
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "user",
+        "admin",
+        "gamer"
+      ],
+      "default": "user"
+    },
+    "audience_group": {
+      "type": "string",
+      "enum": [
+        "girl",
+        "boy",
+        "mixed"
+      ]
+    },
+    "requested_role": {
+      "type": "string",
+      "enum": [
+        "girl",
+        "boy",
+        "mixed"
+      ]
+    },
+    "is_donor": {
+      "type": "boolean",
+      "default": false
+    },
+    "tokens": {
+      "type": "number",
+      "default": 100
+    },
+    "has_seen_tutorial": {
+      "type": "boolean",
+      "default": false
+    },
+    "clan_tutorial_seen": {
+      "type": "boolean",
+      "default": false
+    },
+    "propass_tutorial_seen": {
+      "type": "boolean",
+      "default": false
+    },
+    "last_seen": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "frame_style": {
+      "type": "string",
+      "enum": [
+        "none",
+        "gold",
+        "neon",
+        "fire",
+        "glitch",
+        "rainbow",
+        "diamond",
+        "cyber",
+        "nature",
+        "cosmic",
+        "lightning",
+        "ice",
+        "lava",
+        "toxic",
+        "shadow",
+        "celestial",
+        "galaxy",
+        "blood",
+        "ocean",
+        "phoenix",
+        "dragon",
+        "aurora",
+        "eternal",
+        "void",
+        "daily_aurora",
+        "daily_cosmos",
+        "daily_phoenix",
+        "bp_cosmic_rift",
+        "bp_dragon_breath",
+        "bp_cyber_samurai",
+        "bp_god_tier",
+        "hub_2_0",
+        "legendary",
+        "divine",
+        "mythic",
+        "genesis",
+        "void_titan",
+        "s2_apocalypse",
+        "s2_doomsday",
+        "s2_mutant"
+      ],
+      "default": "none"
+    },
+    "owned_frames": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "active_badge": {
+      "type": "string"
+    },
+    "owned_badges": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "active_animation": {
+      "type": "string",
+      "default": "none"
+    },
+    "owned_animations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "owned_video_frames": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "owned_themes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "default"
+      ]
+    },
+    "active_theme": {
+      "type": "string",
+      "default": "default"
+    },
+    "custom_themes": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "default": []
+    },
+    "active_banner": {
+      "type": "string",
+      "default": "none"
+    },
+    "owned_banners": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "active_background_animation": {
+      "type": "string",
+      "default": "default"
+    },
+    "owned_background_animations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "default"
+      ]
+    },
+    "owned_bundles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "owned_game_upgrades": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "owned_emotes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "pokemon_partner_id": {
+      "type": "number"
+    },
+    "pokemon_partner_sprite": {
+      "type": "string"
+    },
+    "pokemon_partner_name": {
+      "type": "string"
+    },
+    "newsletter_subscribed": {
+      "type": "boolean",
+      "default": false
+    },
+    "newsletter_asked": {
+      "type": "boolean",
+      "default": false
+    },
+    "approved": {
+      "type": "boolean",
+      "default": false
+    },
+    "agreed_to_terms": {
+      "type": "boolean",
+      "default": false
+    },
+    "agreed_terms_version": {
+      "type": "string"
+    },
+    "agreed_to_video_policy": {
+      "type": "boolean",
+      "default": false
+    },
+    "terms_agreed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "privacy_profile_visible": {
+      "type": "boolean",
+      "default": true
+    },
+    "privacy_show_email": {
+      "type": "boolean",
+      "default": false
+    },
+    "privacy_allow_messages": {
+      "type": "boolean",
+      "default": true
+    },
+    "notify_new_follower": {
+      "type": "boolean",
+      "default": true
+    },
+    "notify_new_comment": {
+      "type": "boolean",
+      "default": true
+    },
+    "notify_new_like": {
+      "type": "boolean",
+      "default": true
+    },
+    "banned": {
+      "type": "boolean",
+      "default": false
+    },
+    "ban_reason": {
+      "type": "string"
+    },
+    "trial_completed": {
+      "type": "boolean",
+      "default": false
+    },
+    "daily_login_streak": {
+      "type": "number",
+      "default": 0
+    },
+    "daily_login_last_claim": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "daily_login_cycle_start": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "daily_login_claimed_days": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "default": []
+    },
+    "welcome_reward_claimed": {
+      "type": "boolean",
+      "default": false
+    },
+    "v2_quest_claimed": {
+      "type": "boolean",
+      "default": false
+    },
+    "v2_quest_dismissed": {
+      "type": "boolean",
+      "default": false
+    },
+    "v2_quest_progress": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "bp_level": {
+      "type": "number",
+      "default": 1
+    },
+    "bp_xp": {
+      "type": "number",
+      "default": 0
+    },
+    "bp_premium": {
+      "type": "boolean",
+      "default": false
+    },
+    "bp_claimed_free": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "default": []
+    },
+    "bp_claimed_premium": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "default": []
+    },
+    "bp_claimed_bonus": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "default": []
+    },
+    "shard_inventory": {
+      "type": "object",
+      "default": {
+        "spark": 0,
+        "void": 0,
+        "nova": 0,
+        "omega": 0
+      }
+    },
+    "bp_shard_claimed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "shard_crafted": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "owned_titles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "active_title": {
+      "type": "string"
+    },
+    "owned_chat_colors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "active_chat_color": {
+      "type": "string"
+    },
+    "owned_profile_effects": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "active_profile_effect": {
+      "type": "string"
+    },
+    "owned_cursor_trails": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "active_cursor_trail": {
+      "type": "string",
+      "default": "none"
+    },
+    "owned_profile_sounds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "active_profile_sound": {
+      "type": "string",
+      "default": "none"
+    },
+    "test_season_2": {
+      "type": "boolean",
+      "default": false
+    },
+    "temp_frame_id": {
+      "type": "string"
+    },
+    "temp_frame_expires": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "temp_animation_id": {
+      "type": "string"
+    },
+    "temp_animation_expires": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "neon_dash_upgrades": {
+      "type": "object",
+      "default": {}
+    },
+    "neon_dash_stats": {
+      "type": "object",
+      "default": {}
+    },
+    "neon_racer_data": {
+      "type": "object",
+      "default": {}
+    },
+    "pro_pass": {
+      "type": "object",
+      "default": {}
+    },
+    "pokemon_story_progress": {
+      "type": "object",
+      "default": {}
+    },
+    "reset_token": {
+      "type": "string"
+    },
+    "reset_token_expires": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "daily_game_xp_used": {
+      "type": "number",
+      "default": 0,
+      "description": "XP bereits heute aus Spielen verdient (wird t\u00e4glich zur\u00fcckgesetzt)"
+    },
+    "daily_game_xp_date": {
+      "type": "string",
+      "description": "Datum (YYYY-MM-DD) des letzten XP-Trackings \u2013 zur t\u00e4glichen Reset-Erkennung"
+    },
+    "whatsapp_channel_seen": {
+      "type": "boolean",
+      "default": false,
+      "description": "Hat der Nutzer das WhatsApp-Kanal-Popup best\u00e4tigt oder abgelehnt"
+    }
+  },
+  "required": [
+    "username",
+    "password"
+  ]
+}

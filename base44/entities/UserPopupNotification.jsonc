@@ -1,0 +1,40 @@
+{
+  "name": "UserPopupNotification",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "target_user_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "IDs der Nutzer, die dieses Popup erhalten sollen"
+    },
+    "seen_by": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "IDs der Nutzer, die das Popup best\u00e4tigt haben"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "sent_by": {
+      "type": "string",
+      "description": "Admin username"
+    }
+  },
+  "required": [
+    "title",
+    "message"
+  ]
+}

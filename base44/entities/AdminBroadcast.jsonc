@@ -1,0 +1,41 @@
+{
+  "name": "AdminBroadcast",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Popup-Titel"
+    },
+    "message": {
+      "type": "string",
+      "description": "Nachrichteninhalt"
+    },
+    "emoji": {
+      "type": "string",
+      "default": "\ud83d\udce2"
+    },
+    "color": {
+      "type": "string",
+      "default": "#06b6d4",
+      "description": "Akzentfarbe (hex)"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "info",
+        "warning",
+        "success",
+        "critical"
+      ],
+      "default": "info"
+    }
+  },
+  "required": [
+    "title",
+    "message"
+  ]
+}
