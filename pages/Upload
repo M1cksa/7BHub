@@ -1,0 +1,835 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Upload as UploadIcon, Loader2, CheckCircle2, X, Film, Image as ImageIcon, Calendar as CalendarIcon, Clock, MonitorPlay, Cpu, Wand2 } from 'lucide-react';
+import { createPageUrl } from '@/utils';
+import { Link } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { format } from 'date-fns';
+import { de } from 'date-fns/locale';
+import VideoEditor from '../components/VideoEditor';
+import { toast } from 'sonner';
+
+export default function Upload() {
+  const [file, setFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    category: 'gaming',
+    status: 'vod',
+    scheduledDate: null,
+    quality: '1080p',
+    fps: '30',
+    is_members_only: false,
+    thumbnailBlob: null,
+    video_frame: 'none'
+  });
+  
+  const [user, setUser] = useState(null);
+
+  // Load user
+  useEffect(() => {
+    const stored = localStorage.getItem('app_user');
+    if (stored) {
+      try {
+        setUser(JSON.parse(stored));
+      } catch (e) {
+        console.error('User parse error', e);
+      }
+    }
+  }, []);
+  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
+  const [step, setStep] = useState('select'); // select, details, editor, done
+  const [showEditor, setShowEditor] = useState(false);
+  const [editorData, setEditorData] = useState(null);
+  const dropZoneRef = useRef(null);
+
+  // Cleanup preview URL
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  const captureThumbnail = (videoUrl) => {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.muted = true;
+      video.playsInline = true;
+      
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      let resolved = false;
+      
+      const cleanup = () => {
+        video.removeEventListener('loadedmetadata', onLoadedMetadata);
+        video.removeEventListener('seeked', onSeeked);
+        video.removeEventListener('error', onError);
+        video.src = '';
+        video.load();
+      };
+      
+      const onLoadedMetadata = () => {
+        console.log('✅ Metadata loaded');
+        video.currentTime = 0.5;
+      };
+      
+      const onSeeked = () => {
+        if (resolved) return;
+        
+        try {
+          const canvas = document.createElement('canvas');
+          const maxWidth = isMobile ? 960 : 1280;
+          const maxHeight = isMobile ? 540 : 720;
+          
+          canvas.width = Math.min(video.videoWidth || maxWidth, maxWidth);
+          canvas.height = Math.min(video.videoHeight || maxHeight, maxHeight);
+          
+          const ctx = canvas.getContext('2d', { willReadFrequently: false });
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          
+          const quality = isMobile ? 0.7 : 0.85;
+          canvas.toBlob((blob) => {
+            resolved = true;
+            cleanup();
+            
+            if (blob && blob.size > 500) {
+              console.log('✅ Thumbnail OK:', blob.size, 'bytes');
+              resolve(blob);
+            } else {
+              console.warn('⚠️ Thumbnail failed');
+              resolve(null);
+            }
+          }, 'image/jpeg', quality);
+        } catch (e) {
+          resolved = true;
+          cleanup();
+          console.warn('⚠️ Canvas error:', e);
+          resolve(null);
+        }
+      };
+      
+      const onError = () => {
+        if (resolved) return;
+        resolved = true;
+        cleanup();
+        console.warn('⚠️ Video load error');
+        resolve(null);
+      };
+      
+      video.addEventListener('loadedmetadata', onLoadedMetadata);
+      video.addEventListener('seeked', onSeeked);
+      video.addEventListener('error', onError);
+      
+      const timeout = isMobile ? 10000 : 6000;
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          cleanup();
+          console.warn('⚠️ Thumbnail timeout');
+          resolve(null);
+        }
+      }, timeout);
+      
+      video.src = videoUrl;
+      video.load();
+    });
+  };
+
+  const handleFileSelect = async (selectedFile) => {
+    if (!selectedFile || !selectedFile.type.startsWith('video/')) {
+      toast.error('Bitte wähle eine gültige Videodatei aus');
+      return;
+    }
+
+    const sizeMB = selectedFile.size / (1024 * 1024);
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const maxSize = isMobile ? 3000 : 10000; // 3GB mobile, 10GB desktop für 4K/8K
+
+    if (sizeMB > maxSize) {
+      toast.error(`Video zu groß! Max ${maxSize / 1000}GB (${(sizeMB / 1000).toFixed(2)}GB)`);
+      return;
+    }
+
+    if (sizeMB > 1000) {
+      toast.info('4K/8K Video erkannt - Upload kann 5-15 Min dauern. Fenster nicht schließen!', { duration: 6000 });
+    } else if (sizeMB > 500) {
+      toast.info('Großes Video - Upload läuft...', { duration: 3000 });
+    }
+    
+    setFile(selectedFile);
+    const url = URL.createObjectURL(selectedFile);
+    setPreviewUrl(url);
+    setForm(prev => ({ ...prev, title: selectedFile.name.split('.')[0], thumbnailBlob: null }));
+    setStep('details');
+    
+    // Skip thumbnail on mobile - use black image instead
+    if (isMobile) {
+      console.log('⚠️ Skipping thumbnail on mobile - using black image');
+      // Create black image for mobile
+      const canvas = document.createElement('canvas');
+      canvas.width = 1280;
+      canvas.height = 720;
+      canvas.getContext('2d').fillStyle = '#000000';
+      canvas.getContext('2d').fillRect(0, 0, canvas.width, canvas.height);
+      canvas.toBlob(blob => {
+        setForm(prev => ({ ...prev, thumbnailBlob: blob }));
+      }, 'image/jpeg', 0.8);
+      return;
+    }
+    
+    // Desktop: Generate thumbnail in background with timeout
+    const thumbnailTimeoutMs = 5000;
+    Promise.race([
+      captureThumbnail(url),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), thumbnailTimeoutMs))
+    ])
+      .then(blob => {
+        if (blob) {
+          setForm(prev => ({ ...prev, thumbnailBlob: blob }));
+        }
+      })
+      .catch(() => {
+        console.warn('⚠️ Thumbnail generation ignored - upload will proceed without it');
+      });
+  };
+
+  const onDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dropZoneRef.current) {
+      dropZoneRef.current.classList.add('border-violet-500', 'bg-white/10');
+    }
+  };
+
+  const onDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dropZoneRef.current) {
+      dropZoneRef.current.classList.remove('border-violet-500', 'bg-white/10');
+    }
+  };
+
+  const onDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dropZoneRef.current) {
+      dropZoneRef.current.classList.remove('border-violet-500', 'bg-white/10');
+    }
+    const droppedFile = e.dataTransfer.files[0];
+    handleFileSelect(droppedFile);
+  };
+
+  const generateAiDescription = async () => {
+    if (!form.title) return;
+    setIsGeneratingAi(true);
+    try {
+      const response = await base44.integrations.Core.InvokeLLM({
+        prompt: `Schreibe eine ansprechende, kurze YouTube-Video-Beschreibung (auf Deutsch) für ein Video mit dem Titel "${form.title}". Das Video gehört zur Kategorie "${form.category}". Nutze Emojis und Hashtags.`,
+      });
+      setForm(prev => ({ ...prev, description: response }));
+    } catch (e) {
+      console.error("AI Generation failed", e);
+    } finally {
+      setIsGeneratingAi(false);
+    }
+  };
+
+  const handleEditorSave = (data) => {
+    setEditorData(data);
+    setShowEditor(false);
+    toast.success('Bearbeitungen gespeichert');
+  };
+
+  const compressVideo = async (file, targetWidth = 1920) => {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.muted = true;
+      video.playsInline = true;
+      const videoURL = URL.createObjectURL(file);
+      video.src = videoURL;
+
+      video.onloadedmetadata = async () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Calculate dimensions maintaining aspect ratio
+        const scale = targetWidth / video.videoWidth;
+        canvas.width = targetWidth;
+        canvas.height = Math.floor(video.videoHeight * scale);
+
+        const fps = 30;
+        const duration = video.duration;
+        const frameCount = Math.floor(duration * fps);
+        const frameInterval = 1 / fps;
+
+        const chunks = [];
+        const stream = canvas.captureStream(fps);
+        const mediaRecorder = new MediaRecorder(stream, {
+          mimeType: 'video/webm;codecs=vp9',
+          videoBitsPerSecond: 4000000 // 4 Mbps for 1080p
+        });
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) chunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          const compressedBlob = new Blob(chunks, { type: 'video/webm' });
+          URL.revokeObjectURL(videoURL);
+          resolve(new File([compressedBlob], file.name.replace(/\.[^.]+$/, '.webm'), { type: 'video/webm' }));
+        };
+
+        mediaRecorder.onerror = (e) => {
+          URL.revokeObjectURL(videoURL);
+          reject(e);
+        };
+
+        mediaRecorder.start();
+
+        let currentFrame = 0;
+        const captureFrame = () => {
+          if (currentFrame >= frameCount) {
+            mediaRecorder.stop();
+            return;
+          }
+
+          const time = currentFrame * frameInterval;
+          video.currentTime = time;
+        };
+
+        video.onseeked = () => {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          currentFrame++;
+          if (currentFrame < frameCount) {
+            captureFrame();
+          } else {
+            mediaRecorder.stop();
+          }
+        };
+
+        captureFrame();
+      };
+
+      video.onerror = () => {
+        URL.revokeObjectURL(videoURL);
+        reject(new Error('Video load error'));
+      };
+    });
+  };
+
+  const handleUpload = async () => {
+    setUploading(true);
+    setProgress(10);
+
+    try {
+      if (!file) {
+        toast.error("Keine Datei ausgewählt");
+        setUploading(false);
+        return;
+      }
+
+      const fileSizeMB = file.size / (1024 * 1024);
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const maxSize = isMobile ? 3000 : 10000;
+
+      if (fileSizeMB > maxSize) {
+        toast.error(`Video zu groß (${(fileSizeMB / 1000).toFixed(2)}GB). Max ${maxSize / 1000}GB`);
+        setUploading(false);
+        return;
+      }
+
+      // Get duration
+      setProgress(15);
+      const uploadFile = file;
+      const videoElement = document.createElement('video');
+      const videoURL = URL.createObjectURL(uploadFile);
+      videoElement.src = videoURL;
+
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Video-Metadaten-Fehler')), 10000);
+        videoElement.onloadedmetadata = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+        videoElement.onerror = () => {
+          clearTimeout(timeout);
+          reject(new Error('Video konnte nicht geladen werden'));
+        };
+      });
+
+      const durationSeconds = Math.floor(videoElement.duration);
+      const minutes = Math.floor(durationSeconds / 60);
+      const seconds = durationSeconds % 60;
+      const durationString = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      URL.revokeObjectURL(videoURL);
+
+      // Warn for large videos
+      if (uploadFileSizeMB > 500) {
+        toast.info('⚠️ Sehr großes Video - Upload kann 10-30 Minuten dauern. Bitte Geduld!', { duration: 8000 });
+      } else if (uploadFileSizeMB > 200) {
+        toast.info('Upload läuft - dies kann einige Minuten dauern...', { duration: 5000 });
+      }
+
+      setProgress(50);
+
+      // Direct upload without chunking
+      const uploadResult = await base44.integrations.Core.UploadFile({ file: uploadFile });
+      if (!uploadResult?.file_url) {
+        throw new Error('Upload fehlgeschlagen');
+      }
+      const videoUrl = uploadResult.file_url;
+      setProgress(85);
+
+      console.log('✅ Video hochgeladen:', videoUrl);
+
+      // Upload thumbnail if available
+      let thumbnailUrl = null;
+      if (form.thumbnailBlob) {
+        try {
+          setProgress(87);
+          const thumbnailFile = new File([form.thumbnailBlob], 'thumbnail.jpg', { type: 'image/jpeg' });
+          const thumbnailResult = await base44.integrations.Core.UploadFile({ 
+            file: thumbnailFile 
+          });
+          thumbnailUrl = thumbnailResult?.file_url;
+        } catch (e) {
+          console.warn('Thumbnail upload failed:', e);
+        }
+      }
+
+      setProgress(90);
+
+      // Create Video entity
+      await base44.entities.Video.create({
+        title: form.title,
+        description: form.description,
+        video_url: videoUrl,
+        thumbnail_url: thumbnailUrl,
+        category: form.category,
+        duration: durationString,
+        creator_name: user?.username || 'Unknown',
+        creator_avatar: user?.avatar_url || null,
+        video_frame: form.video_frame || 'none',
+        resolutions: {
+          '1080p': videoUrl,
+          '720p': videoUrl,
+          '480p': videoUrl
+        }
+      });
+
+      setProgress(100);
+      toast.success('Video hochgeladen!');
+
+      setTimeout(() => {
+        setUploading(false);
+        setStep('done');
+      }, 800);
+
+    } catch (error) {
+      console.error('Upload Error Details:', error);
+      toast.error(error.message || 'Upload fehlgeschlagen');
+      setUploading(false);
+      setProgress(0);
+      setStep('details');
+    }
+  };
+
+  if (step === 'done') {
+    return (
+      <div className="min-h-[80vh] flex flex-col items-center justify-center text-center px-4">
+        <motion.div 
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          type="spring"
+          className="w-24 h-24 rounded-full bg-gradient-to-br from-green-400 to-emerald-600 text-white flex items-center justify-center mb-6 shadow-2xl shadow-green-500/30"
+        >
+          <CheckCircle2 className="w-12 h-12" />
+        </motion.div>
+        <h2 className="text-3xl font-bold text-white mb-3">Video verarbeitet!</h2>
+        <p className="text-white/50 mb-8 text-lg">
+          {form.status === 'scheduled' 
+            ? `Dein Video ist geplant für den ${format(form.scheduledDate, 'PP p', { locale: de })}.` 
+            : 'Dein Video wurde erfolgreich hochgeladen und in mehreren Auflösungen transkodiert.'}
+        </p>
+        <div className="flex gap-4">
+          <Link to={createPageUrl('Home')}>
+            <Button variant="outline" className="border-white/10 text-white hover:bg-white/10">
+              Zur Startseite
+            </Button>
+          </Link>
+          <Button onClick={() => {
+            setFile(null);
+            setPreviewUrl(null);
+            setForm({ ...form, title: '', description: '', status: 'vod', scheduledDate: null });
+            setStep('select');
+          }} className="bg-white text-black hover:bg-white/90">
+            Weiteres Video
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-6xl mx-auto py-6 md:py-12 px-4 lg:px-8">
+      <div className="text-center mb-8 md:mb-10">
+        <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-cyan-200 to-teal-200 drop-shadow-lg">Upload Studio</h1>
+        <p className="text-white/50 text-base md:text-lg mt-2">Veröffentliche deine besten Momente</p>
+        {step === 'details' && (
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => setStep('select')}
+            className="text-white/50 hover:text-white mt-4"
+          >
+            <X className="w-4 h-4 mr-2" />
+            Abbrechen
+          </Button>
+        )}
+      </div>
+
+      {showEditor && previewUrl && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-5xl bg-[#0a0a0b] rounded-3xl border border-white/10 p-6 md:p-8 my-8"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-black text-white">Video Bearbeiten</h2>
+              <button
+                onClick={() => setShowEditor(false)}
+                className="w-10 h-10 rounded-full hover:bg-white/5 flex items-center justify-center"
+              >
+                <X className="w-5 h-5 text-white/50" />
+              </button>
+            </div>
+            <VideoEditor
+              videoUrl={previewUrl}
+              onSave={handleEditorSave}
+              onCancel={() => setShowEditor(false)}
+            />
+          </motion.div>
+        </div>
+      )}
+
+      <AnimatePresence mode="wait">
+        {step === 'select' && (
+          <motion.div
+            key="select"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+          >
+            <div 
+              ref={dropZoneRef}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
+              className="relative border-2 border-dashed border-white/10 rounded-3xl p-12 md:p-24 text-center transition-all duration-300 bg-white/[0.02] hover:bg-white/[0.05] hover:border-cyan-500/50 group cursor-pointer backdrop-blur-sm"
+            >
+              <input 
+                type="file" 
+                accept="video/*" 
+                onChange={(e) => handleFileSelect(e.target.files[0])}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+              />
+              
+              <div className="w-24 h-24 md:w-32 md:h-32 mx-auto rounded-full bg-black/20 border border-white/10 flex items-center justify-center mb-6 md:mb-8 group-hover:scale-110 transition-transform duration-300 shadow-2xl">
+                <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br from-cyan-600 to-teal-500 flex items-center justify-center shadow-lg shadow-cyan-500/30">
+                  <UploadIcon className="w-8 h-8 md:w-10 md:h-10 text-white" />
+                </div>
+              </div>
+              
+              <h3 className="text-xl md:text-3xl font-bold text-white mb-2 md:mb-4">Video Auswählen</h3>
+              <p className="text-white/50 text-base md:text-lg mb-6 md:mb-8 max-w-md mx-auto leading-relaxed">
+                Ziehe deine Dateien hierher oder klicke, um sie auszuwählen.
+              </p>
+              
+              <div className="flex justify-center flex-wrap gap-4 text-xs md:text-sm text-white/40 font-medium">
+                <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5">
+                      <MonitorPlay className="w-4 h-4 text-cyan-400" /> 8K/4K
+                    </span>
+                <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5">
+                  <Cpu className="w-4 h-4 text-violet-400" /> AI Features
+                </span>
+                <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5">
+                  <Film className="w-4 h-4 text-fuchsia-400" /> 60 FPS
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {step === 'details' && (
+          <motion.div
+            key="details"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="grid xl:grid-cols-3 gap-8"
+          >
+            {/* Left: Preview & Tech Specs */}
+            <div className="xl:col-span-1 space-y-6">
+              <div className="rounded-2xl bg-black overflow-hidden border border-white/10 shadow-2xl shadow-black/50 sticky top-24">
+                <div className="aspect-video relative">
+                  <video 
+                    src={previewUrl} 
+                    className="w-full h-full object-contain"
+                    controls
+                  />
+                </div>
+                <div className="p-6 bg-white/[0.03] backdrop-blur-xl">
+                  <div className="flex items-start justify-between mb-6">
+                     <div className="flex-1">
+                        <h3 className="font-semibold text-white text-lg leading-tight mb-1 line-clamp-2">{form.title || file?.name}</h3>
+                        <p className="text-sm text-white/40">{(file?.size / (1024 * 1024)).toFixed(2)} MB • {file?.type}</p>
+                        {form.thumbnailBlob ? (
+                          <div className="flex items-center gap-1.5 text-green-400 text-xs mt-2">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Thumbnail bereit
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-amber-400 text-xs mt-2">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            Erstelle Thumbnail...
+                          </div>
+                        )}
+                     </div>
+                  </div>
+
+                  <div className="space-y-4 border-t border-white/5 pt-6">
+                    <h4 className="text-xs font-bold text-white/30 uppercase tracking-wider mb-3">Qualitätseinstellungen</h4>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                       <div>
+                          <label className="text-xs text-white/50 mb-1.5 block">Auflösung</label>
+                          <Select value={form.quality} onValueChange={(v) => setForm({...form, quality: v})}>
+                            <SelectTrigger className="h-9 bg-black/20 border-white/5 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="1080p">1080p HD</SelectItem>
+                              <SelectItem value="1440p">1440p QHD</SelectItem>
+                              <SelectItem value="4k">4K UHD</SelectItem>
+                            </SelectContent>
+                          </Select>
+                       </div>
+                       <div>
+                          <label className="text-xs text-white/50 mb-1.5 block">Framerate</label>
+                          <Select value={form.fps} onValueChange={(v) => setForm({...form, fps: v})}>
+                            <SelectTrigger className="h-9 bg-black/20 border-white/5 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="30">30 FPS</SelectItem>
+                              <SelectItem value="60">60 FPS</SelectItem>
+                            </SelectContent>
+                          </Select>
+                       </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-between pt-2">
+                      <label className="text-xs text-white/50">Nur für Mitglieder</label>
+                      <Switch 
+                        checked={form.is_members_only}
+                        onCheckedChange={(c) => setForm({...form, is_members_only: c})}
+                      />
+                    </div>
+
+                    {user?.owned_video_frames?.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-white/5">
+                        <label className="text-xs text-white/50 mb-2 block">Video-Rahmen</label>
+                        <Select value={form.video_frame} onValueChange={(v) => setForm({...form, video_frame: v})}>
+                          <SelectTrigger className="h-9 bg-black/20 border-white/5 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Kein Rahmen</SelectItem>
+                            {user.owned_video_frames.map(frameId => (
+                              <SelectItem key={frameId} value={frameId} className="capitalize">
+                                {frameId}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Metadata Form */}
+            <div className="xl:col-span-2 space-y-8">
+              <div className="p-8 rounded-[32px] bg-white/[0.03] backdrop-blur-2xl border border-white/10 shadow-2xl">
+                <div className="space-y-8">
+                  
+                  {/* Title & Description */}
+                  <div className="space-y-6">
+                    <div>
+                      <Label className="text-base font-semibold text-white mb-3 block">Titel</Label>
+                      <Input 
+                        value={form.title}
+                        onChange={(e) => setForm({ ...form, title: e.target.value })}
+                        placeholder="Ein epischer Titel..."
+                        className="bg-black/20 border-white/10 text-white h-14 text-xl font-medium focus:border-violet-500/50 transition-all px-5 rounded-xl"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between items-center mb-3">
+                        <Label className="text-base font-semibold text-white">Beschreibung</Label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={generateAiDescription}
+                          disabled={isGeneratingAi || !form.title}
+                          className="h-8 text-xs text-violet-400 hover:bg-violet-500/10 rounded-lg"
+                        >
+                          {isGeneratingAi ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <Cpu className="w-3 h-3 mr-2" />}
+                          AI Generator
+                        </Button>
+                      </div>
+                      <Textarea 
+                        value={form.description}
+                        onChange={(e) => setForm({ ...form, description: e.target.value })}
+                        placeholder="Worum geht es in deinem Video?"
+                        className="bg-black/20 border-white/10 text-white min-h-[200px] resize-none focus:border-violet-500/50 transition-all p-5 rounded-xl text-base leading-relaxed"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="h-px bg-white/5" />
+
+                  {/* Category & Scheduling */}
+                  <div className="grid md:grid-cols-2 gap-8">
+                    <div className="space-y-4">
+                       <Label className="text-base font-semibold text-white block">Kategorie</Label>
+                       <Select 
+                        value={form.category} 
+                        onValueChange={(value) => setForm({ ...form, category: value })}
+                      >
+                        <SelectTrigger className="bg-black/20 border-white/10 text-white h-12 rounded-xl">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#1a1a1c] border-white/10 text-white">
+                          {['gaming', 'music', 'education', 'entertainment', 'tech', 'art', 'lifestyle', 'sports'].map(cat => (
+                            <SelectItem key={cat} value={cat} className="capitalize py-3 cursor-pointer">
+                              {cat}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-4">
+                       <Label className="text-base font-semibold text-white block">Veröffentlichung</Label>
+                       <div className="grid grid-cols-2 gap-2 p-1 bg-black/20 rounded-xl border border-white/5">
+                          <button 
+                            onClick={() => setForm({...form, status: 'vod'})}
+                            className={`flex items-center justify-center gap-2 h-10 rounded-lg text-sm font-medium transition-all ${form.status === 'vod' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white'}`}
+                          >
+                             Sofort
+                          </button>
+                          <button 
+                             onClick={() => setForm({...form, status: 'scheduled'})}
+                             className={`flex items-center justify-center gap-2 h-10 rounded-lg text-sm font-medium transition-all ${form.status === 'scheduled' ? 'bg-violet-500/20 text-violet-400' : 'text-white/40 hover:text-white'}`}
+                          >
+                             <CalendarIcon className="w-4 h-4" /> Geplant
+                          </button>
+                       </div>
+
+                       {form.status === 'scheduled' && (
+                         <Popover>
+                           <PopoverTrigger asChild>
+                             <Button
+                               variant={"outline"}
+                               className={`w-full justify-start text-left font-normal h-12 rounded-xl border-white/10 bg-black/20 text-white hover:bg-black/30 hover:text-white`}
+                             >
+                               <CalendarIcon className="mr-2 h-4 w-4" />
+                               {form.scheduledDate ? format(form.scheduledDate, "PPP", { locale: de }) : <span>Datum wählen</span>}
+                             </Button>
+                           </PopoverTrigger>
+                           <PopoverContent className="w-auto p-0 bg-[#1a1a1c] border-white/10">
+                             <Calendar
+                               mode="single"
+                               selected={form.scheduledDate}
+                               onSelect={(d) => setForm({...form, scheduledDate: d})}
+                               initialFocus
+                               className="text-white"
+                             />
+                           </PopoverContent>
+                         </Popover>
+                       )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                {uploading && (
+                  <div className="mt-8 space-y-3 bg-black/20 p-6 rounded-xl border border-white/5">
+                    <div className="flex justify-between text-sm font-medium text-white/70">
+                      <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin text-violet-500" /> Upload läuft...</span>
+                      <span>{Math.round(progress)}%</span>
+                    </div>
+                    <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
+                      <motion.div 
+                        className="h-full bg-gradient-to-r from-violet-600 via-fuchsia-500 to-cyan-500"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${progress}%` }}
+                        transition={{ type: "spring", stiffness: 50 }}
+                      />
+                    </div>
+                    <p className="text-xs text-white/30 text-center pt-1">Bitte schließe das Fenster nicht.</p>
+                  </div>
+                )}
+
+                <div className="pt-8 mt-8 border-t border-white/5 flex gap-3">
+                 <Button 
+                   onClick={() => setShowEditor(true)}
+                   disabled={uploading}
+                   size="lg"
+                   variant="outline"
+                   className="border-white/10 text-white hover:bg-white/10 rounded-xl px-6 py-6 text-lg flex-1 md:flex-none"
+                 >
+                   <Wand2 className="w-5 h-5 mr-2" />
+                   Bearbeiten
+                   {editorData && <span className="ml-2 text-xs text-cyan-400">✓</span>}
+                 </Button>
+                 <Button 
+                   onClick={handleUpload} 
+                   disabled={uploading || !form.title}
+                   size="lg"
+                   className="bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white rounded-xl px-10 py-6 text-lg shadow-lg shadow-cyan-500/25 flex-1 transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                 >
+                   {uploading ? (
+                     'Verarbeite...'
+                   ) : form.status === 'scheduled' ? (
+                     'Planung speichern'
+                   ) : (
+                     'Veröffentlichen'
+                   )}
+                 </Button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
